@@ -22,7 +22,12 @@ from . import iso8601
 
 _ = translationstring.TranslationStringFactory('colander')
 
-required = object()
+class _required(object):
+    """ Represents a required value in colander-related operations. """
+    def __repr__(self):
+        return '<colander.required>'
+
+required = _required()
 _marker = required # bw compat
 
 class _null(object):
@@ -42,11 +47,13 @@ class _null(object):
 null = _null()
 
 class _drop(object):
+    """ Represents a value that will be dropped from the schema if it
+    is missing during *serialization* or *deserialization*.  Passed as
+    a value to the `missing` or `default` keyword argument
+    of :class:`SchemaNode`.
     """
-    Represents a value that should be dropped if it is missing during
-    deserialization.
-    """
-    pass
+    def __repr__(self):
+        return '<colander.drop>'
 
 drop = _drop()
 
@@ -56,6 +63,13 @@ def interpolate(msgs):
             yield s.interpolate()
         else:
             yield s
+
+class UnboundDeferredError(Exception):
+    """
+    An exception raised by :meth:`SchemaNode.deserialize` when an attempt
+    is made to deserialize a node which has an unbound :class:`deferred`
+    validator.
+    """
 
 class Invalid(Exception):
     """
@@ -165,13 +179,15 @@ class Invalid(Exception):
             return str(self.pos)
         return str(self.node.name)
 
-    def asdict(self, translate=None):
+    def asdict(self, translate=None, separator='; '):
         """ Return a dictionary containing a basic
         (non-language-translated) error report for this exception.
 
         If ``translate`` is supplied, it must be a callable taking a
         translation string as its sole argument and returning a localized,
         interpolated string.
+
+        If ``separator`` is supplied, error messages are joined with that.
         """
         paths = self.paths()
         errors = {}
@@ -184,13 +200,30 @@ class Invalid(Exception):
                 keyname and keyparts.append(keyname)
             if translate:
                 msgs = [translate(msg) for msg in msgs]
-            errors['.'.join(keyparts)] = '; '.join(interpolate(msgs))
+            msgs = interpolate(msgs)
+            if separator:
+                msgs = separator.join(msgs)
+            else:
+                msgs = list(msgs)
+            errors['.'.join(keyparts)] = msgs
         return errors
 
     def __str__(self):
         """ Return a pretty-formatted string representation of the
         result of an execution of this exception's ``asdict`` method"""
         return pprint.pformat(self.asdict())
+
+
+class UnsupportedFields(Invalid):
+    """
+    Exception used when schema object detect unknown fields in the
+    cstruct during deserialize.
+    """
+
+    def __init__(self, node, fields, msg=None):
+        super(UnsupportedFields, self).__init__(node, msg)
+        self.fields = fields
+
 
 class All(object):
     """ Composite validator which succeeds if none of its
@@ -249,6 +282,8 @@ class Function(object):
 
     The default value for the ``msg`` when not provided via the
     constructor is ``Invalid value``.
+
+    The ``message`` parameter has been deprecated, use ``msg`` instead.
     """
     def __init__(self, function, msg=None, message=None):
         self.function = function
@@ -286,6 +321,9 @@ class Regex(object):
         error message to be used; otherwise, defaults to 'String does
         not match expected pattern'.
 
+        The ``regex`` expression behaviour can be modified by specifying
+        any ``flags`` value taken by ``re.compile``.
+
         The ``regex`` argument may also be a pattern object (the
         result of ``re.compile``) instead of a string.
 
@@ -293,9 +331,9 @@ class Regex(object):
         validation succeeds; otherwise, :exc:`colander.Invalid` is
         raised with the ``msg`` error message.
     """
-    def __init__(self, regex, msg=None):
+    def __init__(self, regex, msg=None, flags=0):
         if isinstance(regex, string_types):
-            self.match_object = re.compile(regex)
+            self.match_object = re.compile(regex, flags)
         else:
             self.match_object = regex
         if msg is None:
@@ -314,7 +352,7 @@ class Email(Regex):
         the error message to be used when raising :exc:`colander.Invalid`;
         otherwise, defaults to 'Invalid email address'.
     """
-    
+
     def __init__(self, msg=None):
         email_regex = text_(EMAIL_RE)
         if msg is None:
@@ -346,48 +384,73 @@ class Range(object):
     provided, it defaults to ``'${val} is greater than maximum value
     ${max}'``.
     """
-    min_err = _('${val} is less than minimum value ${min}')
-    max_err = _('${val} is greater than maximum value ${max}')
+    _MIN_ERR = _('${val} is less than minimum value ${min}')
+    _MAX_ERR = _('${val} is greater than maximum value ${max}')
 
-    def __init__(self, min=None, max=None, min_err=None, max_err=None):
+    def __init__(self, min=None, max=None, min_err=_MIN_ERR, max_err=_MAX_ERR):
         self.min = min
         self.max = max
-        if min_err is not None:
-            self.min_err = min_err
-        if max_err is not None:
-            self.max_err = max_err
+        self.min_err = min_err
+        self.max_err = max_err
 
     def __call__(self, node, value):
         if self.min is not None:
             if value < self.min:
-                min_err = _(self.min_err, mapping={'val':value, 'min':self.min})
+                min_err = _(
+                    self.min_err, mapping={'val':value, 'min':self.min})
                 raise Invalid(node, min_err)
 
         if self.max is not None:
             if value > self.max:
-                max_err = _(self.max_err, mapping={'val':value, 'max':self.max})
+                max_err = _(
+                    self.max_err, mapping={'val':value, 'max':self.max})
                 raise Invalid(node, max_err)
 
+
 class Length(object):
-    """ Validator which succeeds if the value passed to it has a
-    length between a minimum and maximum.  The value is most often a
-    string."""
-    def __init__(self, min=None, max=None):
+    """Validator which succeeds if the value passed to it has a
+        length between a minimum and maximum, expressed in the
+        optional ``min`` and ``max`` arguments.
+        The value can be any sequence, most often a string.
+
+        If ``min`` is not specified, or is specified as ``None``,
+        no lower bound exists.  If ``max`` is not specified, or
+        is specified as ``None``, no upper bound exists.
+
+        The default error messages are "Shorter than minimum length ${min}"
+        and "Longer than maximum length ${max}". These can be customized:
+
+        ``min_err`` is used to form the ``msg`` of the
+        :exc:`colander.Invalid` error when reporting a validation failure
+        caused by a value not meeting the minimum length.  If ``min_err`` is
+        specified, it must be a string.  The string may contain the
+        replacement target ``${min}``.
+
+        ``max_err`` is used to form the ``msg`` of the
+        :exc:`colander.Invalid` error when reporting a validation failure
+        caused by a value exceeding the maximum length.  If ``max_err`` is
+        specified, it must be a string.  The string may contain the
+        replacement target ``${max}``.
+        """
+    _MIN_ERR = _('Shorter than minimum length ${min}')
+    _MAX_ERR = _('Longer than maximum length ${max}')
+
+    def __init__(self, min=None, max=None, min_err=_MIN_ERR, max_err=_MAX_ERR):
         self.min = min
         self.max = max
+        self.min_err = min_err
+        self.max_err = max_err
 
     def __call__(self, node, value):
         if self.min is not None:
             if len(value) < self.min:
-                min_err = _('Shorter than minimum length ${min}',
-                            mapping={'min':self.min})
+                min_err = _(self.min_err, mapping={'min': self.min})
                 raise Invalid(node, min_err)
-
         if self.max is not None:
             if len(value) > self.max:
-                max_err = _('Longer than maximum length ${max}',
-                            mapping={'max':self.max})
+                max_err = _(self.max_err, mapping={'max': self.max})
                 raise Invalid(node, max_err)
+
 
 class OneOf(object):
     """ Validator which succeeds if the value passed to it is one of
@@ -401,6 +464,33 @@ class OneOf(object):
             err = _('"${val}" is not one of ${choices}',
                     mapping={'val':value, 'choices':choices})
             raise Invalid(node, err)
+
+
+class NoneOf(object):
+    """ Validator which succeeds if the value passed to it is none of a
+    fixed set of values.
+
+    ``msg_err`` is used to form the ``msg`` of the :exc:`colander.Invalid`
+    error when reporting a validation failure.  If ``msg_err`` is specified,
+    it must be a string.  The string may contain the replacement targets
+    ``${choices}`` and ``${val}``, representing the set of forbidden values
+    and the provided value respectively.
+    """
+    _MSG_ERR = _('"${val}" must not be one of ${choices}')
+
+    def __init__(self, choices, msg_err=_MSG_ERR):
+        self.forbidden = choices
+        self.msg_err = msg_err
+
+    def __call__(self, node, value):
+        if value not in self.forbidden:
+            return
+
+        choices = ', '.join(['%s' % x for x in self.forbidden])
+        err = _(self.msg_err, mapping={'val': value, 'choices': choices})
+
+        raise Invalid(node, err)
+
 
 class ContainsOnly(object):
     """ Validator which succeeds if the value passed to is a sequence and each
@@ -458,6 +548,11 @@ URL_REGEX = r"""(?i)\b((?:[a-z][\w-]+:(?:/{1,3}|[a-z0-9%])|www\d{0,3}[.]|[a-z0-9
 
 url = Regex(URL_REGEX, _('Must be a URL'))
 
+
+UUID_REGEX = r"""^(?:urn:uuid:)?\{?[a-f0-9]{8}(?:-?[a-f0-9]{4}){3}-?[a-f0-9]{12}\}?$"""
+uuid = Regex(UUID_REGEX, _('Invalid UUID string'), re.IGNORECASE)
+
+
 class SchemaType(object):
     """ Base class for all schema types """
     def flatten(self, node, appstruct, prefix='', listitem=False):
@@ -466,7 +561,7 @@ class SchemaType(object):
             selfname = prefix
         else:
             selfname = '%s%s' % (prefix, node.name)
-        result[selfname] = appstruct
+        result[selfname.rstrip('.')] = appstruct
         return result
 
     def unflatten(self, node, paths, fstruct):
@@ -594,11 +689,10 @@ class Mapping(SchemaType):
 
         if self.unknown == 'raise':
             if value:
-                raise Invalid(
-                    node,
-                    _('Unrecognized keys in mapping: "${val}"',
-                      mapping={'val':value})
-                    )
+                raise UnsupportedFields(
+                    node, value,
+                    msg=_('Unrecognized keys in mapping: "${val}"',
+                          mapping={'val': value}))
 
         elif self.unknown == 'preserve':
             result.update(value)
@@ -917,7 +1011,7 @@ class Sequence(Positional, SchemaType):
 
     def _validate(self, node, value, accept_scalar):
         if (hasattr(value, '__iter__') and
-            not hasattr(value, 'get') and 
+            not hasattr(value, 'get') and
             not isinstance(value, string_types)):
             return list(value)
         if accept_scalar:
@@ -941,13 +1035,20 @@ class Sequence(Positional, SchemaType):
         error = None
         result = []
 
+        subnode = node.children[0]
         for num, subval in enumerate(value):
+            if subval is drop or (subval is null and subnode.default is drop):
+                continue
             try:
-                result.append(callback(node.children[0], subval))
+                sub_result = callback(subnode, subval)
             except Invalid as e:
                 if error is None:
                     error = Invalid(node)
                 error.add(e, num)
+            else:
+                if sub_result is drop:
+                    continue
+                result.append(sub_result)
 
         if error is not None:
             raise error
@@ -1067,7 +1168,7 @@ Seq = Sequence
 class String(SchemaType):
     """ A type representing a Unicode string.
 
-    This type constructor accepts one argument:
+    This type constructor accepts two arguments:
 
     ``encoding``
        Represents the encoding which should be applied to value
@@ -1102,7 +1203,7 @@ class String(SchemaType):
 
        - A non-Unicode input value to ``serialize`` is converted to a
          Unicode using the encoding (``unicode(value, encoding)``);
-         subsequently the Unicode object is reeencoded to a ``str``
+         subsequently the Unicode object is re-encoded to a ``str``
          object using the encoding and returned.
 
        - A Unicode input value to ``deserialize`` is returned
@@ -1120,11 +1221,17 @@ class String(SchemaType):
        encoding.  If this is not true, an :exc:`colander.Invalid`
        error will result.
 
+    ``allow_empty``
+       Boolean, if True allows deserialization of an empty string. If
+       False (default), empty strings will deserialize to
+       :attr:`colander.null`
+
     The subnodes of the :class:`colander.SchemaNode` that wraps
     this type are ignored.
     """
-    def __init__(self, encoding=None):
+    def __init__(self, encoding=None, allow_empty=False):
         self.encoding = encoding
+        self.allow_empty = allow_empty
 
     def serialize(self, node, appstruct):
         if appstruct is null:
@@ -1139,6 +1246,8 @@ class String(SchemaType):
                     result = text_type(appstruct)
             else:
                 result = text_type(appstruct)
+                if self.encoding:
+                    result = result.encode(self.encoding)
             return result
         except Exception as e:
             raise Invalid(node,
@@ -1146,6 +1255,9 @@ class String(SchemaType):
                             mapping={'val':appstruct, 'err':e})
                           )
     def deserialize(self, node, cstruct):
+        if cstruct == '' and self.allow_empty:
+            return text_type('')
+
         if not cstruct:
             return null
 
@@ -1230,24 +1342,27 @@ class Decimal(Number):
     method of this class, the :attr:`colander.null` value will be
     returned.
 
-    The Decimal constructor takes two optional arguments, ``quant`` and
-    ``rounding``.  If supplied, ``quant`` should be a string,
+    The Decimal constructor takes three optional arguments, ``quant``,
+    ``rounding`` and ``normalize``.  If supplied, ``quant`` should be a string,
     (e.g. ``1.00``).  If supplied, ``rounding`` should be one of the Python
     ``decimal`` module rounding options (e.g. ``decimal.ROUND_UP``,
     ``decimal.ROUND_DOWN``, etc).  The serialized and deserialized result
     will be quantized and rounded via
     ``result.quantize(decimal.Decimal(quant), rounding)``.  ``rounding`` is
-    ignored if ``quant`` is not supplied.
+    ignored if ``quant`` is not supplied.  If ``normalize`` is ``True``,
+    the serialized and deserialized result will be normalized by stripping
+    the rightmost trailing zeros.
 
     The subnodes of the :class:`colander.SchemaNode` that wraps
     this type are ignored.
     """
-    def __init__(self, quant=None, rounding=None):
+    def __init__(self, quant=None, rounding=None, normalize=False):
         if quant is None:
             self.quant = None
         else:
             self.quant = decimal.Decimal(quant)
         self.rounding = rounding
+        self.normalize = normalize
 
     def num(self, val):
         result = decimal.Decimal(str(val))
@@ -1256,6 +1371,8 @@ class Decimal(Number):
                 result = result.quantize(self.quant)
             else:
                 result = result.quantize(self.quant, self.rounding)
+        if self.normalize:
+            result = result.normalize()
         return result
 
 class Money(Decimal):
@@ -1271,8 +1388,7 @@ class Money(Decimal):
     this type are ignored.
     """
     def __init__(self):
-        self.quant = decimal.Decimal('.01')
-        self.rounding = decimal.ROUND_UP
+        super(Money, self).__init__(decimal.Decimal('.01'), decimal.ROUND_UP)
 
 class Boolean(SchemaType):
     """ A type representing a boolean object.
@@ -1300,7 +1416,7 @@ class Boolean(SchemaType):
     are considered ``True``, and an Invalid exception would be raised
     for values outside of both :attr:`false_choices` and :attr:`true_choices`.
 
-    Serialization will produce :attr:`true_val` or :attr:`false_val` 
+    Serialization will produce :attr:`true_val` or :attr:`false_val`
     based on the value.
 
     If the :attr:`colander.null` value is passed to the serialize
@@ -1347,8 +1463,8 @@ class Boolean(SchemaType):
             else:
                 raise Invalid(node,
                               _('"${val}" is neither in (${false_choices}) '
-                                'nor in (${true_choices})', 
-                                mapping={'val':cstruct, 
+                                'nor in (${true_choices})',
+                                mapping={'val':cstruct,
                                          'false_choices': self.false_reprs,
                                          'true_choices': self.true_reprs })
                               )
@@ -1531,9 +1647,7 @@ class DateTime(SchemaType):
     """
     err_template =  _('Invalid date')
 
-    def __init__(self, default_tzinfo=_marker):
-        if default_tzinfo is _marker:
-            default_tzinfo = iso8601.Utc()
+    def __init__(self, default_tzinfo=iso8601.UTC):
         self.default_tzinfo = default_tzinfo
 
     def serialize(self, node, appstruct):
@@ -1741,7 +1855,9 @@ class _SchemaNode(object):
     - ``typ``: The 'type' for this node.  It should be an
       instance of a class that implements the
       :class:`colander.interfaces.Type` interface.  If ``typ`` is not passed,
-      it defaults to ``colander.Mapping()``.
+      a call to the ``schema_type()`` method on this class is made to
+      get a default type.  (When subclassing, ``schema_type()`` should
+      be overridden to provide a reasonable default type).
 
     - ``*children``: a sequence of subnodes.  If the subnodes of this
       node are not known at construction time, they can later be added
@@ -1754,8 +1870,10 @@ class _SchemaNode(object):
     - ``typ``: The 'type' for this node can optionally be passed in as a
       keyword argument. See the documentation for the positional arg above.
 
-    - ``default``: The default serialization value for this node.
-      Default: :attr:`colander.null`.
+    - ``default``: The default serialization value for this node when
+      not set.  If ``default`` is :attr:`colander.drop`, the node
+      will be dropped from schema serialization.  If not provided,
+      the node will be serialized to :attr:`colander.null`.
 
     - ``missing``: The default deserialization value for this node.  If it is
       not provided, the missing value of this node will be the special marker
@@ -1763,7 +1881,7 @@ class _SchemaNode(object):
       'required'.  When ``missing`` is :attr:`colander.required`, the
       ``required`` computed attribute will be ``True``.  When ``missing`` is
       :attr:`colander.drop`, the node is dropped from the schema if it isn't
-      set during serialization/deserialization.
+      set during deserialization.
 
     - ``missing_msg``: Optional error message to be used if the value is
       required and missing.
@@ -1812,10 +1930,10 @@ class _SchemaNode(object):
     validator = None
     default = null
     missing = required
-    missing_msg = _('Required')
+    missing_msg = 'Required'
     name = ''
-    raw_title = _marker
-    title = ''
+    raw_title = _marker  # only changes if title is explicitly set
+    title = _marker
     description = ''
     widget = None
     after_bind = None
@@ -1829,18 +1947,17 @@ class _SchemaNode(object):
         return node
 
     def __init__(self, *arg, **kw):
-        # bw compat forces us to treat first arg as type always
+        # bw compat forces us to treat first arg as type if not a _SchemaNode
         if 'typ' in kw:
             self.typ = kw.pop('typ')
-            _add_node_children(self, arg)
-        elif arg:
-            self.typ = arg[0]
-            _add_node_children(self, arg[1:])
+        elif arg and not isinstance(arg[0], _SchemaNode):
+            self.typ, arg = arg[0], arg[1:]
         else:
             self.typ = self.schema_type()
+        _add_node_children(self, arg)
 
         # bw compat forces us to manufacture a title if one is not supplied
-        title = kw.get('title', _marker)
+        title = kw.get('title', self.title)
         if title is _marker:
             name = kw.get('name', self.name)
             kw['title'] = name.replace('_', ' ').title()
@@ -1852,7 +1969,7 @@ class _SchemaNode(object):
     @staticmethod
     def schema_type():
         raise NotImplementedError(
-            'Schema node construction without a typ argument or '
+            'Schema node construction without a `typ` argument or '
             'a schema_type() callable present on the node class '
             )
 
@@ -1954,15 +2071,21 @@ class _SchemaNode(object):
         if appstruct is null:
             appstruct = self.missing
             if appstruct is required:
-                raise Invalid(self, self.missing_msg)
+                raise Invalid(self, _(self.missing_msg,
+                                      mapping={'title': self.title,
+                                               'name':self.name}))
+
             if isinstance(appstruct, deferred): # unbound schema with deferreds
                 raise Invalid(self, self.missing_msg)
             # We never deserialize or validate the missing value
             return appstruct
 
         if self.validator is not None:
-            if not isinstance(self.validator, deferred): # unbound
-                self.validator(self, appstruct)
+            if isinstance(self.validator, deferred): # unbound
+                raise UnboundDeferredError(
+                    "Schema node {node} has an unbound deferred validator"
+                    .format(node=self))
+            self.validator(self, appstruct)
         return appstruct
 
     def add(self, node):
@@ -1995,9 +2118,12 @@ class _SchemaNode(object):
         """ Clone the schema node and return the clone.  All subnodes
         are also cloned recursively.  Attributes present in node
         dictionaries are preserved."""
-        cloned = self.__class__(self.typ)
-        cloned.__dict__.update(self.__dict__)
-        cloned.children = [ node.clone() for node in self.children ]
+        children = [node.clone() for node in self.children]
+        cloned = self.__class__(self.typ, *children)
+
+        attributes = self.__dict__.copy()
+        attributes.pop('children', None)
+        cloned.__dict__.update(attributes)
         return cloned
 
     def bind(self, **kw):
@@ -2214,9 +2340,9 @@ class instantiate(object):
     All parameters passed to the decorator and passed along to the
     :class:`SchemaNode` during instantiation.
     """
-    
+
     def __init__(self,*args,**kw):
         self.args,self.kw = args,kw
-        
+
     def __call__(self,class_):
         return class_(*self.args,**self.kw)

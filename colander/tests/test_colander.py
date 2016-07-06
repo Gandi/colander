@@ -110,9 +110,10 @@ class TestInvalid(unittest.TestCase):
         exc1.add(exc2, 2)
         exc2.add(exc3, 3)
         d = exc1.asdict()
-        self.assertEqual(d,
-                         {'node1.node2.3': 'exc1; exc2; validator1; validator2',
-                          'node1.node3': 'exc1; message1'})
+        self.assertEqual(
+            d,
+            {'node1.node2.3': 'exc1; exc2; validator1; validator2',
+             'node1.node3': 'exc1; message1'})
 
     def test_asdict_with_all_validator_functional(self):
         # see https://github.com/Pylons/colander/issues/2
@@ -135,6 +136,14 @@ class TestInvalid(unittest.TestCase):
                 result,
                 {'': ("Number 1 must be lower than number 2; "
                       "They can't be the same, either")})
+        try:
+            schema.deserialize(dict(number1=2, number2=2))
+        except c.Invalid as e:
+            result = e.asdict(separator=None)
+            self.assertEqual(
+                result,
+                {'': ["Number 1 must be lower than number 2",
+                      "They can't be the same, either"]})
 
     def test___str__(self):
         from colander import Positional
@@ -153,7 +162,8 @@ class TestInvalid(unittest.TestCase):
         result = str(exc1)
         self.assertEqual(
             result,
-            "{'node1.node2.3': 'exc1; exc2; exc3', 'node1.node4': 'exc1; exc4'}"
+            "{'node1.node2.3': 'exc1; exc2; exc3', "
+            "'node1.node4': 'exc1; exc4'}"
             )
 
     def test___setitem__fails(self):
@@ -425,15 +435,17 @@ class TestEmail(unittest.TestCase):
         validator = self._makeOne()
         from colander import Invalid
         self.assertRaises(Invalid, validator, None, 'me@here.')
-        self.assertRaises(Invalid, validator, None, 'name@here.tldiswaytoolooooooooong')
+        self.assertRaises(Invalid,
+                          validator, None, 'name@here.tldiswaytoolooooooooong')
         self.assertRaises(Invalid, validator, None, '@here.us')
         self.assertRaises(Invalid, validator, None, 'me@here..com')
         self.assertRaises(Invalid, validator, None, 'me@we-here-.com')
 
+
 class TestLength(unittest.TestCase):
-    def _makeOne(self, min=None, max=None):
+    def _makeOne(self, **kw):
         from colander import Length
-        return Length(min=min, max=max)
+        return Length(**kw)
 
     def test_success_no_bounds(self):
         validator = self._makeOne()
@@ -461,6 +473,17 @@ class TestLength(unittest.TestCase):
         e = invalid_exc(validator, None, 'ab')
         self.assertEqual(e.msg.interpolate(), 'Longer than maximum length 1')
 
+    def test_min_failure_msg_override(self):
+        validator = self._makeOne(min=1, min_err='Need at least ${min}, mate')
+        e = invalid_exc(validator, None, [])
+        self.assertEqual(e.msg.interpolate(), 'Need at least 1, mate')
+
+    def test_max_failure_msg_override(self):
+        validator = self._makeOne(max=1, max_err='No more than ${max}, mate')
+        e = invalid_exc(validator, None, [1, 2])
+        self.assertEqual(e.msg.interpolate(), 'No more than 1, mate')
+
+
 class TestOneOf(unittest.TestCase):
     def _makeOne(self, values):
         from colander import OneOf
@@ -474,6 +497,22 @@ class TestOneOf(unittest.TestCase):
         validator = self._makeOne([1, 2])
         e = invalid_exc(validator, None, None)
         self.assertEqual(e.msg.interpolate(), '"None" is not one of 1, 2')
+
+
+class TestNoneOf(unittest.TestCase):
+    def _makeOne(self, values):
+        from colander import NoneOf
+        return NoneOf(values)
+
+    def test_success(self):
+        validator = self._makeOne([1, 2])
+        self.assertEqual(validator(None, 3), None)
+
+    def test_failure(self):
+        validator = self._makeOne([1, 2])
+        e = invalid_exc(validator, None, 2)
+        self.assertEqual(e.msg.interpolate(), '"2" must not be one of 1, 2')
+
 
 class TestContainsOnly(unittest.TestCase):
     def _makeOne(self, values):
@@ -535,6 +574,57 @@ class Test_url_validator(unittest.TestCase):
 
     def test_it_failure(self):
         val = 'not-a-url'
+        from colander import Invalid
+        self.assertRaises(Invalid, self._callFUT, val)
+
+class TestUUID(unittest.TestCase):
+    def _callFUT(self, val):
+        from colander import uuid
+        return uuid(None, val)
+
+    def test_success_hexadecimal(self):
+        val = '123e4567e89b12d3a456426655440000'
+        result = self._callFUT(val)
+        self.assertEqual(result, None)
+
+    def test_success_with_dashes(self):
+        val = '123e4567-e89b-12d3-a456-426655440000'
+        result = self._callFUT(val)
+        self.assertEqual(result, None)
+
+    def test_success_upper_case(self):
+        val = '123E4567-E89B-12D3-A456-426655440000'
+        result = self._callFUT(val)
+        self.assertEqual(result, None)
+
+    def test_success_with_braces(self):
+        val = '{123e4567-e89b-12d3-a456-426655440000}'
+        result = self._callFUT(val)
+        self.assertEqual(result, None)
+
+    def test_success_with_urn_ns(self):
+        val = 'urn:uuid:{123e4567-e89b-12d3-a456-426655440000}'
+        result = self._callFUT(val)
+        self.assertEqual(result, None)
+
+    def test_failure_random_string(self):
+        val = 'not-a-uuid'
+        from colander import Invalid
+        self.assertRaises(Invalid, self._callFUT, val)
+
+    def test_failure_not_hexadecimal(self):
+        val = '123zzzzz-uuuu-zzzz-uuuu-42665544zzzz'
+        from colander import Invalid
+        self.assertRaises(Invalid, self._callFUT, val)
+
+    def test_failure_invalid_length(self):
+        # Correct UUID: 8-4-4-4-12
+        val = '88888888-333-4444-333-cccccccccccc'
+        from colander import Invalid
+        self.assertRaises(Invalid, self._callFUT, val)
+
+    def test_failure_with_invalid_urn_ns(self):
+        val = 'urn:abcd:{123e4567-e89b-12d3-a456-426655440000}'
         from colander import Invalid
         self.assertRaises(Invalid, self._callFUT, val)
 
@@ -636,10 +726,13 @@ class TestMapping(unittest.TestCase):
         self.assertEqual(result, {'a':1})
 
     def test_deserialize_unknown_raise(self):
+        import colander
         node = DummySchemaNode(None)
         node.children = [DummySchemaNode(None, name='a')]
         typ = self._makeOne(unknown='raise')
         e = invalid_exc(typ.deserialize, node, {'a':1, 'b':2})
+        self.assertTrue(isinstance(e, colander.UnsupportedFields))
+        self.assertEqual(e.fields, {'b': 2})
         self.assertEqual(e.msg.interpolate(),
                          "Unrecognized keys in mapping: \"{'b': 2}\"")
 
@@ -725,7 +818,7 @@ class TestMapping(unittest.TestCase):
         typ = self._makeOne()
         result = typ.serialize(node, {'a':drop})
         self.assertEqual(result, {})
-        
+
     def test_flatten(self):
         node = DummySchemaNode(None, name='node')
         int1 = DummyType()
@@ -1254,6 +1347,14 @@ class TestSequence(unittest.TestCase):
         result = typ.serialize(node, colander.null)
         self.assertEqual(result, colander.null)
 
+    def test_serialize_drop(self):
+        from colander import drop
+        node = DummySchemaNode(None)
+        node.children = [DummySchemaNode(None, name='a')]
+        typ = self._makeOne()
+        result = typ.serialize(node, (drop,))
+        self.assertEqual(result, [])
+
     def test_serialize_not_iterable(self):
         node = DummySchemaNode(None)
         typ = self._makeOne()
@@ -1304,6 +1405,16 @@ class TestSequence(unittest.TestCase):
         node = DummySchemaNode(None, name='node')
         node.children = [
             DummySchemaNode(DummyType(), name='foo'),
+        ]
+        typ = self._makeOne()
+        result = typ.flatten(node, [1, 2])
+        self.assertEqual(result, {'node.0': 1, 'node.1': 2})
+
+    def test_flatten_with_integer(self):
+        from colander import Integer
+        node = DummySchemaNode(None, name='node')
+        node.children = [
+            DummySchemaNode(Integer(), name='foo'),
         ]
         typ = self._makeOne()
         result = typ.flatten(node, [1, 2])
@@ -1363,9 +1474,9 @@ class TestSequence(unittest.TestCase):
         self.assertEqual(result, SequenceItems(['a']))
 
 class TestString(unittest.TestCase):
-    def _makeOne(self, encoding=None):
+    def _makeOne(self, encoding=None, allow_empty=False):
         from colander import String
-        return String(encoding)
+        return String(encoding, allow_empty)
 
     def test_alias(self):
         from colander import Str
@@ -1378,6 +1489,9 @@ class TestString(unittest.TestCase):
         typ = self._makeOne(None)
         result = typ.deserialize(node, '')
         self.assertEqual(result, null)
+        typ = self._makeOne(None, allow_empty=True)
+        result = typ.deserialize(node, '')
+        self.assertEqual(result, '')
 
     def test_deserialize_uncooperative(self):
         val = Uncooperative()
@@ -1481,6 +1595,13 @@ class TestString(unittest.TestCase):
         e = invalid_exc(typ.serialize, node, not_utf8)
         self.assertTrue('cannot be serialized' in e.msg)
 
+    def test_serialize_encoding_with_non_string_type(self):
+        utf8 = text_type('123').encode('utf-8')
+        node = DummySchemaNode(None)
+        typ = self._makeOne('utf-8')
+        result = typ.serialize(node, 123)
+        self.assertEqual(result, utf8)
+
 class TestInteger(unittest.TestCase):
     def _makeOne(self):
         from colander import Integer
@@ -1499,7 +1620,7 @@ class TestInteger(unittest.TestCase):
         result = typ.serialize(node, val)
         self.assertEqual(result, colander.null)
 
-    def test_serialize_emptystring(self):
+    def test_deserialize_emptystring(self):
         import colander
         val = ''
         node = DummySchemaNode(None)
@@ -1592,9 +1713,9 @@ class TestFloat(unittest.TestCase):
         self.assertEqual(result, '1.0')
 
 class TestDecimal(unittest.TestCase):
-    def _makeOne(self, quant=None, rounding=None):
+    def _makeOne(self, quant=None, rounding=None, normalize=False):
         from colander import Decimal
-        return Decimal(quant, rounding)
+        return Decimal(quant, rounding, normalize)
 
     def test_serialize_null(self):
         import colander
@@ -1626,6 +1747,14 @@ class TestDecimal(unittest.TestCase):
         result = typ.serialize(node, val)
         self.assertEqual(result, '0.01')
 
+    def test_serialize_normalize(self):
+        from decimal import Decimal
+        val = Decimal('1.00')
+        node = DummySchemaNode(None)
+        typ = self._makeOne(normalize=True)
+        result = typ.serialize(node, val)
+        self.assertEqual(result, '1')
+
     def test_deserialize_fails(self):
         val = 'P'
         node = DummySchemaNode(None)
@@ -1648,6 +1777,15 @@ class TestDecimal(unittest.TestCase):
         typ = self._makeOne('.01', decimal.ROUND_UP)
         result = typ.deserialize(node, val)
         self.assertEqual(result, decimal.Decimal('1.01'))
+
+    def test_deserialize_with_normalize(self):
+        from decimal import Decimal
+        val = '1.00'
+        node = DummySchemaNode(None)
+        typ = self._makeOne(normalize=True)
+        result = typ.deserialize(node, val)
+        self.assertEqual(result, Decimal('1'))
+        self.assertEqual(str(result), '1')
 
     def test_serialize_fails(self):
         val = 'P'
@@ -2342,8 +2480,9 @@ class TestSchemaNode(unittest.TestCase):
 
     def test_ctor_no_title(self):
         child = DummySchemaNode(None, name='fred')
-        node = self._makeOne(None, child, validator=1, default=2, name='name_a',
-                             missing='missing')
+        node = self._makeOne(
+            None, child, validator=1, default=2,
+            name='name_a', missing='missing')
         self.assertEqual(node.typ, None)
         self.assertEqual(node.children, [child])
         self.assertEqual(node.validator, 1)
@@ -2462,6 +2601,19 @@ class TestSchemaNode(unittest.TestCase):
         e = invalid_exc(node.deserialize, 1)
         self.assertEqual(e.msg, 'Wrong')
 
+    def test_deserialize_with_unbound_validator(self):
+        from colander import Invalid
+        from colander import deferred
+        from colander import UnboundDeferredError
+        typ = DummyType()
+        def validator(node, kw):
+            def _validate(node, value):
+                node.raise_invalid('Invalid')
+            return _validate
+        node = self._makeOne(typ, validator=deferred(validator))
+        self.assertRaises(UnboundDeferredError, node.deserialize, None)
+        self.assertRaises(Invalid, node.bind(foo='foo').deserialize, None)
+
     def test_deserialize_value_is_null_no_missing(self):
         from colander import null
         from colander import Invalid
@@ -2482,6 +2634,14 @@ class TestSchemaNode(unittest.TestCase):
         node = self._makeOne(typ, missing_msg='Missing')
         e = invalid_exc(node.deserialize, null)
         self.assertEqual(e.msg, 'Missing')
+
+    def test_deserialize_value_with_interpolated_missing_msg(self):
+        from colander import null
+        typ = DummyType()
+        node = self._makeOne(typ, missing_msg='Missing attribute ${title}',
+                             name='name_a')
+        e = invalid_exc(node.deserialize, null)
+        self.assertEqual(e.msg.interpolate(), 'Missing attribute Name A')
 
     def test_deserialize_noargs_uses_default(self):
         typ = DummyType()
@@ -2725,6 +2885,32 @@ class TestSchemaNodeSubclassing(unittest.TestCase):
         node = MyNode()
         result = node.deserialize(colander.null)
         self.assertEqual(result, 10)
+
+    def test_subclass_uses_title(self):
+        import colander
+        class MyNode(colander.SchemaNode):
+            schema_type = colander.Int
+            title = 'some title'
+        node = MyNode(name='my')
+        self.assertEqual(node.title, 'some title')
+
+    def test_subclass_title_overwritten_by_constructor(self):
+        import colander
+        class MyNode(colander.SchemaNode):
+            schema_type = colander.Int
+            title = 'some title'
+        node = MyNode(name='my', title='other title')
+        self.assertEqual(node.title, 'other title')
+
+    def test_subelement_title_not_overwritten(self):
+        import colander
+        class SampleNode(colander.SchemaNode):
+            schema_type = colander.String
+            title = 'Some Title'
+        class SampleSchema(colander.Schema):
+            node = SampleNode()
+        schema = SampleSchema()
+        self.assertEqual('Some Title', schema.children[0].title)
 
     def test_subclass_value_overridden_by_constructor(self):
         import colander
@@ -3172,6 +3358,13 @@ class TestSchema(unittest.TestCase):
         result = node.serialize(expected)
         self.assertEqual(result, expected)
 
+    def test_imperative_with_implicit_schema_type(self):
+        import colander
+        node = colander.SchemaNode(colander.String())
+        schema = colander.Schema(node)
+        self.assertEqual(schema.schema_type, colander.Mapping)
+        self.assertEqual(schema.children[0], node)
+
 class TestSequenceSchema(unittest.TestCase):
     def test_succeed(self):
         import colander
@@ -3205,6 +3398,38 @@ class TestSequenceSchema(unittest.TestCase):
             e.msg,
             'Sequence schemas must have exactly one child node')
 
+    def test_imperative_with_implicit_schema_type(self):
+        import colander
+        node = colander.SchemaNode(colander.String())
+        schema = colander.SequenceSchema(node)
+        self.assertEqual(schema.schema_type, colander.Sequence)
+        self.assertEqual(schema.children[0], node)
+
+    def test_deserialize_drop(self):
+        import colander
+        class MySchema(colander.SequenceSchema):
+            a = colander.SchemaNode(colander.String(), missing=colander.drop)
+        node = MySchema()
+        result = node.deserialize([None])
+        self.assertEqual(result, [])
+        result = node.deserialize([colander.null])
+        self.assertEqual(result, [])
+
+    def test_serialize_drop_default(self):
+        import colander
+        class MySchema(colander.SequenceSchema):
+            a = colander.SchemaNode(colander.String(), default=colander.drop)
+        node = MySchema()
+        result = node.serialize([colander.null])
+        self.assertEqual(result, [])
+
+    def test_clone_with_sequence_schema(self):
+        import colander
+        thingnode = colander.SchemaNode(colander.String(), name='foo')
+        schema = colander.SequenceSchema(colander.Sequence(), thingnode)
+        result = schema.clone()
+        self.assertEqual(result.children[0].name, 'foo')
+
 class TestTupleSchema(unittest.TestCase):
     def test_it(self):
         import colander
@@ -3215,6 +3440,13 @@ class TestTupleSchema(unittest.TestCase):
         self.assertTrue(isinstance(node, colander.SchemaNode))
         self.assertEqual(node.typ.__class__, colander.Tuple)
         self.assertEqual(node.children[0].typ.__class__, colander.String)
+
+    def test_imperative_with_implicit_schema_type(self):
+        import colander
+        node = colander.SchemaNode(colander.String())
+        schema = colander.TupleSchema(node)
+        self.assertEqual(schema.schema_type, colander.Tuple)
+        self.assertEqual(schema.children[0], node)
 
 class TestFunctional(object):
     def test_deserialize_ok(self):
@@ -3424,7 +3656,8 @@ class TestFunctional(object):
     def test_invalid_asdict(self):
         expected = {
             'schema.int': '20 is greater than maximum value 10',
-            'schema.ob': 'The dotted name "no.way.this.exists" cannot be imported',
+            'schema.ob': 'The dotted name "no.way.this.exists" '
+                         'cannot be imported',
             'schema.seq.0.0': '"q" is not a number',
             'schema.seq.1.0': '"w" is not a number',
             'schema.seq.2.0': '"e" is not a number',
@@ -3619,7 +3852,7 @@ class TestUltraDeclarative(unittest.TestCase, TestFunctional):
         return schema
 
 class TestDeclarativeWithInstantiate(unittest.TestCase, TestFunctional):
-    
+
     def _makeSchema(self, name='schema'):
 
         import colander
@@ -3633,20 +3866,20 @@ class TestDeclarativeWithInstantiate(unittest.TestCase, TestFunctional):
             ob = colander.SchemaNode(colander.GlobalObject(package=colander))
             @colander.instantiate()
             class seq(colander.SequenceSchema):
-                
+
                 @colander.instantiate()
                 class tup(colander.TupleSchema):
                     tupint = colander.SchemaNode(colander.Int())
                     tupstring = colander.SchemaNode(colander.String())
-                    
+
             @colander.instantiate()
             class tup(colander.TupleSchema):
                 tupint = colander.SchemaNode(colander.Int())
                 tupstring = colander.SchemaNode(colander.String())
-                
+
             @colander.instantiate()
             class seq2(colander.SequenceSchema):
-                
+
                 @colander.instantiate()
                 class mapping(colander.MappingSchema):
                     key = colander.SchemaNode(colander.Int())
@@ -3667,6 +3900,16 @@ class Test_null(unittest.TestCase):
         from colander import null
         import pickle
         self.assertTrue(pickle.loads(pickle.dumps(null)) is null)
+
+class Test_required(unittest.TestCase):
+    def test___repr__(self):
+        from colander import required
+        self.assertEqual(repr(required), '<colander.required>')
+
+class Test_drop(unittest.TestCase):
+    def test___repr__(self):
+        from colander import drop
+        self.assertEqual(repr(drop), '<colander.drop>')
 
 class Dummy(object):
     pass

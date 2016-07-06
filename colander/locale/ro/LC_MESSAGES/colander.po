@@ -1,158 +1,155 @@
-# Dutch translations for colander.
-# Copyright (C) 2010 ORGANIZATION
+# Romanian (î/sînt) translations for colander.
+# Copyright (C) 2013 ORGANIZATION
 # This file is distributed under the same license as the colander project.
-# FIRST AUTHOR <EMAIL@ADDRESS>, 2010.
 #
+# Sergiu Bivol <sergiu@cip.md>, 2016.
 msgid ""
 msgstr ""
-"Project-Id-Version: colander 0.8\n"
+"Project-Id-Version: colander 1.0b1\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
 "POT-Creation-Date: 2013-11-16 14:23+0900\n"
-"PO-Revision-Date: 2011-06-03 00:22+0200\n"
-"Last-Translator: Tinne Cahy <cahytinne@gmail.com>\n"
-"Language-Team: nl <LL@li.org>\n"
-"Language: \n"
+"PO-Revision-Date: 2016-04-23 14:23+0300\n"
+"Last-Translator: Sergiu Bivol <sergiu@cip.md>\n"
+"Language-Team: Romanian <kde-i18n-ro@kde.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"Plural-Forms: nplurals=2; plural=(n != 1)\n"
 "Generated-By: Babel 1.3\n"
+"Language: ro\n"
+"Plural-Forms: nplurals=3; plural=n==1 ? 0 : (n==0 || (n%100 > 0 && n%100 < "
+"20)) ? 1 : 2;\n"
+"X-Generator: Lokalize 1.5\n"
 
 #: colander/__init__.py:240
 msgid "Invalid value"
-msgstr "Ongeldige waarde"
+msgstr "Valoare nevalidă"
 
 #: colander/__init__.py:283
 msgid "String does not match expected pattern"
-msgstr "Tekst is niet in het juiste formaat"
+msgstr "Șirul nu se potrivește cu modelul așteptat"
 
 #: colander/__init__.py:302
 msgid "Invalid email address"
-msgstr "Ongeldig e-mail adres"
+msgstr "Adresă email nevalidă"
 
 #: colander/__init__.py:330
 msgid "${val} is less than minimum value ${min}"
-msgstr "${val} is minder dan de minimum waarde ${min}"
+msgstr "${val} e mai mică decît valoarea minimă ${min}"
 
 #: colander/__init__.py:331
 msgid "${val} is greater than maximum value ${max}"
-msgstr "${val} is groter dan de maximale toegestane waarde ${max}"
+msgstr "${val} e mai mare decît valoarea maximă ${max}"
 
 #: colander/__init__.py:363
 msgid "Shorter than minimum length ${min}"
-msgstr "De minimale lengte is ${min}"
+msgstr "Mai scurt decît lungimea minimă ${min}"
 
 #: colander/__init__.py:369
 msgid "Longer than maximum length ${max}"
-msgstr "De maximale lengte is ${max}"
+msgstr "Mai lung decît lungimea maximă ${max}"
 
 #: colander/__init__.py:382
 msgid "\"${val}\" is not one of ${choices}"
-msgstr "\"${val}\" is geen toegestane waarde. Kies één van ${choices}."
+msgstr "„${val}” nu e una dintre ${choice}"
 
 #: colander/__init__.py:392
 msgid "One or more of the choices you made was not acceptable"
-msgstr "Één of meer van de keuzes die je maakte zijn niet aanvaardbaar"
+msgstr "Una sau mai multe dintre alegerile făcute nu erau acceptabile"
 
 #: colander/__init__.py:414 colander/__init__.py:419
-#, fuzzy
 msgid "\"${val}\" is not a valid credit card number"
-msgstr "\"${val}\" is geen geldige kredietkaartnummer"
+msgstr "„${val}” nu e număr valid de carte de credit"
 
 #: colander/__init__.py:440
 msgid "Must be a URL"
-msgstr "Moet een URL zijn"
+msgstr "Trebuie să fie URL"
 
 #: colander/__init__.py:536
 msgid "\"${val}\" is not a mapping type: ${err}"
-msgstr "\"${val}\" is geen mapping type: ${err}"
+msgstr "„${val}” nu e tip de corespondență: ${err}"
 
 #: colander/__init__.py:578
 msgid "Unrecognized keys in mapping: \"${val}\""
-msgstr "Onbekende waardes in mapping: \"${val}\""
+msgstr "Chei nerecunoscute în corespondență: „${val}”"
 
 #: colander/__init__.py:674 colander/__init__.py:905
 msgid "\"${val}\" is not iterable"
-msgstr "\"${val}\" is niet itereerbaar"
+msgstr "„${val}” nu e iterabilă"
 
 #: colander/__init__.py:682
 msgid ""
 "\"${val}\" has an incorrect number of elements (expected ${exp}, was ${was})"
 msgstr ""
-"\"${val}\" bevat niet het juiste aantal elementen (${was} in plaats van ${exp})"
+"„${val}” are număr greșit de elemente (se așteptau ${exp}, erau ${was})"
 
 #: colander/__init__.py:821 colander/__init__.py:852
 msgid "${cstruct} is not iterable"
-msgstr "${cstruct} is niet itereerbaar"
+msgstr "${cstruct} nu e iterabilă"
 
 #: colander/__init__.py:1124
 msgid "${val} cannot be serialized: ${err}"
-msgstr "${val} kan niet worden opgeslagen: ${err}"
+msgstr "${val} nu poate fi serializată: ${err}"
 
 #: colander/__init__.py:1142
 msgid "${val} is not a string: ${err}"
-msgstr "${val} is geen tekst: ${err}"
+msgstr "${val} nu e șir: ${err}"
 
 #: colander/__init__.py:1162 colander/__init__.py:1173
 msgid "\"${val}\" is not a number"
-msgstr "\"${val}\" is geen getal"
+msgstr "„${val}” nu e număr"
 
 #: colander/__init__.py:1317
 msgid "${val} is not a string"
-msgstr "${val} is geen tekst"
+msgstr "${val} nu e șir"
 
 #: colander/__init__.py:1328
 msgid "\"${val}\" is neither in (${false_choices}) nor in (${true_choices})"
-msgstr "\"${val}\" is niet aanwezig in (${false_choices}) noch aanwezig in (${true_choices})"
+msgstr "„${val}” nu e nici în (${false_choices}), nici în (${true_choices})"
 
-#: colander/__init__.py:1388 colander/__init__.py:1405
-#: colander/__init__.py:1415
+#: colander/__init__.py:1388 colander/__init__.py:1405 colander/__init__.py:1415
 msgid "relative name \"${val}\" irresolveable without package"
-msgstr "relatieve aanduiding \"${val}\" kan niet worden opgezocht zonder package"
+msgstr "denumirea relativă „${val}” nu e rezolvabilă fără pachet"
 
 #: colander/__init__.py:1445
 msgid "\"${val}\" has no __name__"
-msgstr "\"${val}\" heeft geen __name__"
+msgstr "„${val}” nu are __name__"
 
 #: colander/__init__.py:1454
 msgid "\"${val}\" is not a string"
-msgstr "\"${val}\" is geen tekst"
+msgstr "„${val}” nu e șir"
 
 #: colander/__init__.py:1463
 msgid "The dotted name \"${name}\" cannot be imported"
-msgstr "Kan \"${name}\" niet importeren"
+msgstr "Denumirea punctată „${name}” nu poate fi importată"
 
 #: colander/__init__.py:1511 colander/__init__.py:1587
 msgid "Invalid date"
-msgstr "Geen geldige datum"
+msgstr "Dată nevalidă"
 
 #: colander/__init__.py:1527
 msgid "\"${val}\" is not a datetime object"
-msgstr "\"${val}\" is geen datetime object"
+msgstr "„${val}” nu e obiect „datetime”"
 
 #: colander/__init__.py:1598
 msgid "\"${val}\" is not a date object"
-msgstr "\"${val}\" is geen date object"
+msgstr "„${val}” nu e obiect „date”"
 
 #: colander/__init__.py:1659
-#, fuzzy
 msgid "Invalid time"
-msgstr "Geen geldige datum"
+msgstr "Oră nevalidă"
 
 #: colander/__init__.py:1670
-#, fuzzy
 msgid "\"${val}\" is not a time object"
-msgstr "\"${val}\" is geen datetime object"
+msgstr "„${val}” nu e obiect „time”"
 
 #: colander/__init__.py:1795
 msgid "Required"
-msgstr "Verplicht"
+msgstr "Necesar"
 
 #: colander/tests/test_colander.py:295 colander/tests/test_colander.py:302
 msgid "fail ${val}"
-msgstr "faal ${val}"
+msgstr "eșuează ${val}"
 
 #: colander/tests/test_colander.py:469
-#, fuzzy
 msgid "${val}: ${choices}"
-msgstr "\"${val}\" is geen toegestane waarde. Kies één van ${choices}."
+msgstr "${val}: ${choices}"
