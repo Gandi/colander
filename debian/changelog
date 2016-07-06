@@ -1,3 +1,9 @@
+colander (1.0b1-5) unstable; urgency=medium
+
+  * New release
+
+ -- Guillaume Gauvrit <guillaume@gandi.net>  Wed, 06 Jul 2016 16:49:19 +0200
+
 colander (1.0b1-4) unstable; urgency=medium
 
   * Add missing dep.
