@@ -1,3 +1,10 @@
+colander (1.3.1-1) unstable; urgency=medium
+
+  * New release
+  * Update packaging rules for jessie
+
+ -- Guillaume Gauvrit <guillaume@gandi.net>  Mon, 11 Sep 2017 10:16:19 +0200
+
 colander (1.0b1-4) unstable; urgency=medium
 
   * Add missing dep.
